@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>JURY - Live Terminal</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: #1E2761;
+    font-family: -apple-system, Segoe UI, Calibri, sans-serif;
+  }
+  header {
+    background: #161C4D;
+    color: #00C48C;
+    padding: 14px 22px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    font-size: 13px;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header span.sub { color: #AEB8E0; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 13px; }
+  #terminal { flex: 1; padding: 14px; overflow: hidden; }
+  .xterm { height: 100%; }
+</style>
+</head>
+<body>
+
+<header>
+  JURY &mdash; running in your browser
+  <span class="sub">subscription.py &middot; unchanged</span>
+</header>
+<div id="terminal"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+<script>
+  const term = new Terminal({
+    theme: {
+      background: "#1E2761",
+      foreground: "#E7EAF7",
+      cursor: "#00C48C",
+      selectionBackground: "#3B4581",
+    },
+    fontFamily: "Consolas, 'Courier New', monospace",
+    fontSize: 15,
+    cursorBlink: true,
+    convertEol: true,
+  });
+  term.open(document.getElementById("terminal"));
+  term.focus();
+
+  let currentLine = "";
+
+  function sendLine(line) {
+    fetch("/input", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ line: line }),
+    });
+  }
+
+  term.onData((data) => {
+    const code = data.charCodeAt(0);
+    if (code === 13) {            // Enter
+      term.write("\r\n");
+      sendLine(currentLine);
+      currentLine = "";
+    } else if (code === 127) {    // Backspace
+      if (currentLine.length > 0) {
+        currentLine = currentLine.slice(0, -1);
+        term.write("\b \b");
+      }
+    } else if (code === 3) {      // Ctrl+C - ignored here
+      // no-op
+    } else {
+      currentLine += data;
+      term.write(data);
+    }
+  });
+
+  const source = new EventSource("/stream");
+  source.onmessage = (event) => {
+    const chunk = JSON.parse(event.data);
+    term.write(chunk);
+  };
+  source.addEventListener("done", () => {
+    term.write("\r\n\x1b[32m[process finished - refresh the page to run again]\x1b[0m\r\n");
+    source.close();
+  });
+</script>
+</body>
+</html>
